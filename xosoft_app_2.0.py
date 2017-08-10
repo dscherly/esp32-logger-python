@@ -13,7 +13,10 @@ import struct
 from pyqtgraph.Qt import QtGui, QtCore
 import pyqtgraph as pg
 import sensorClass
-import heneClass
+import heneClass2
+import numpy as np
+
+np.set_printoptions(threshold=np.nan,linewidth=np.nan)
 
 LEFT = 0
 RIGHT = 1
@@ -168,7 +171,7 @@ class xosoft(QtGui.QWidget):
     def connect_sockets(self):
         self.sensor0 = sensorClass.Sensor()
         self.sensor1 = sensorClass.Sensor()
-        self.heneboard = heneClass.Heneboard()
+        self.heneboard = heneClass2.Heneboard()
         
         #left foot socket
         self.sock0 = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -209,7 +212,7 @@ class xosoft(QtGui.QWidget):
         #try to read from each socket
         for idx, sock in enumerate(self.socketlist):
             try:
-                data, addr = sock.recvfrom(64)
+                data, addr = sock.recvfrom(1024)
                 #left foot
                 if idx == LEFT:
                     sensorClass.parseData(self.sensor0, data, idx, time.time())
@@ -251,43 +254,13 @@ class xosoft(QtGui.QWidget):
                               file=self.f)
                         
                 elif idx == HENEBOARD:
-#                    print(ord(temp[0]),temp[1],ord(temp[2]),ord(temp[3]),ord(temp[4]),ord(temp[5]),ord(temp[6]),ord(temp[7]),ord(temp[8]))
-                     heneClass.parseData(self.heneboard, data, idx, time.time())
- #                    self.heneboard.printData()
-                     self.heneboard.addXY()
-                     if len(self.heneboard.y_deltats) > 2:
-                         if self.logstate:
-                             print('heneboard',
-                                   self.heneboard.counter,
-                                   self.heneboard.ts,
-#                                   self.heneboard.syncswitch,
-#                                   self.heneboard.data0,
-#                                   self.heneboard.data1,
-#                                   self.heneboard.data2,
-#                                   self.heneboard.data3,
-#                                   self.heneboard.data4,
-#                                   self.heneboard.data5,
-#                                   self.heneboard.data6,
-#                                   self.heneboard.data7,
-#                                   self.heneboard.data8,
-#                                   self.heneboard.data9,
-#                                   self.heneboard.data10,
-                                   file=self.f)
+                     self.parseData(self.heneboard, data, idx, time.time())
 
-                         if self.showHene:
-                             pass
- #                            self.plotcurve_hene0.setData(self.heneboard.x, self.heneboard.y_data0)
- #                            self.plotcurve_hene1.setData(self.heneboard.x, self.heneboard.y_data1)
- #                            self.plotcurve_hene2.setData(self.heneboard.x, self.heneboard.y_data2)
-#                             self.plotcurve_hene3.setData(self.heneboard.x, self.heneboard.y_data3)
- #                            self.plotcurve_hene4.setData(self.heneboard.x, self.heneboard.y_data4)
- #                            self.plotcurve_hene5.setData(self.heneboard.x, self.heneboard.y_data5)
- #                            self.plotcurve_hene6.setData(self.heneboard.x, self.heneboard.y_data6)
- #                            self.plotcurve_hene7.setData(self.heneboard.x, self.heneboard.y_data7)
- #                            self.plotcurve_hene8.setData(self.heneboard.x, self.heneboard.y_data8)
- #                            self.plotcurve_hene9.setData(self.heneboard.x, self.heneboard.y_data9)
- #                            self.plotcurve_hene10.setData(self.heneboard.x, self.heneboard.y_data10)
-                         self.heneMissedPackets.setText(str(self.heneboard.missedPackets))
+                     if self.showHene and self.heneboard.data0.size > 0:
+                         self.plotcurve_hene0.setData(self.heneboard.ts0, self.heneboard.data0)
+                     if self.showHene and self.heneboard.data1.size > 0:
+                         self.plotcurve_hene1.setData(self.heneboard.ts1, self.heneboard.data1)
+                         
 
             except socket.error:
                 pass
@@ -296,6 +269,7 @@ class xosoft(QtGui.QWidget):
     def on_logbutton_clicked(self):
         if self.logstate == False:
             self.logbutton.setText("Stop logging")
+            self.heneboard.clear()
             
             print ("Logging started")
             self.checkbox_hene.setChecked(False)
@@ -304,25 +278,46 @@ class xosoft(QtGui.QWidget):
             self.showHene = False
             self.showLeft = False
             self.showRight = False
-            
+
+            self.logstate = True
+
             date = datetime.datetime.today()
             filename = "log_%d%02d%02d_%02d%02d%02d.csv" % (date.year, date.month, date.day, date.hour, date.minute, date.second)
             self.f = open(filename,'w')
-            self.logstate = True
-            print("Sensor Counter Timestamp ADC0 ADC1 ADC2 ADC3\n"
-              "Heneboard Counter timestamp Syncswitch data0 data1 data2 data3 data4 data5 data6 data7 data8 data9 data10", file=self.f)
+            print("Sensor Counter Timestamp ADC0 ADC1 ADC2 ADC3\nChannel Timestamp Value", file=self.f)
+
         else:
             print ("Logging stopped")
+
+            #save heneboard log data to a file                    
+            self.print_data_to_file('Data0',self.heneboard.ts0,self.heneboard.data0)
+            self.print_data_to_file('Data1',self.heneboard.ts1,self.heneboard.data1)
+            self.print_data_to_file('Data2',self.heneboard.ts2,self.heneboard.data2)
+            self.print_data_to_file('Data3',self.heneboard.ts3,self.heneboard.data3)
+            self.print_data_to_file('Data4',self.heneboard.ts4,self.heneboard.data4)
+            self.print_data_to_file('Data5',self.heneboard.ts5,self.heneboard.data5)
+            self.print_data_to_file('Data6',self.heneboard.ts6,self.heneboard.data6)
+            self.print_data_to_file('Data7',self.heneboard.ts7,self.heneboard.data7)
+            self.print_data_to_file('Data8',self.heneboard.ts8,self.heneboard.data8)
+            self.print_data_to_file('Data9',self.heneboard.ts9,self.heneboard.data9)
+            self.f.close()
+            
+            self.heneboard.max_array_length = heneClass2.MAX_ARRAY_LEN
             self.logbutton.setText("Start logging")
             self.logstate = False
-            self.f.close()
             self.checkbox_hene.setChecked(True)
             self.checkbox_left.setChecked(True)
             self.checkbox_right.setChecked(True)
             self.showHene = True
             self.showLeft = True
             self.showRight = True
-        
+    
+    def print_data_to_file(self,str1,ts,data):        
+        for i in range(0,(len(data)-1)):
+            print(str1,end=" ",file=self.f)
+            print(ts[i], end=" ", file=self.f)
+            print(data[i], file=self.f)
+            
     def on_checkbox_hene_clicked(self):
         if self.checkbox_hene.isChecked():
             self.showHene = True
@@ -361,7 +356,23 @@ class xosoft(QtGui.QWidget):
             self.on_logbutton_clicked()
         print("Window closed -> Sockets shutdown")
         event.accept()
-        
+
+    def parseData(self, sensor, data, index, timestamp):
+        try:
+            #take 10 bytes at a time
+            tmp = data
+            while True:
+                if len(tmp) < 10:
+                    break
+                packet = tmp[:10]
+                tmp = tmp[10:]
+            
+                #unpack data into the buffer
+                sensor.unpack(packet, timestamp)
+    
+        except:
+            return
+
 def main():
     app = QtGui.QApplication(sys.argv)
     app.setApplicationName('xosoft')
