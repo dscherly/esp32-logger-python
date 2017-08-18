@@ -62,6 +62,10 @@ class xosoft(QtGui.QWidget):
         self.logbutton = QtGui.QPushButton("Start logging")
         grid.addWidget(self.logbutton,4,2)
         
+        #send command to nucleo to start sending data
+        self.imubutton = QtGui.QPushButton("IMU start")
+        grid.addWidget(self.imubutton,5,2)
+        
         #data plot for hene board
         self.plotwidget_hene = pg.PlotWidget()
         self.plotwidget_hene.setLabel('left','ADC')
@@ -164,6 +168,7 @@ class xosoft(QtGui.QWidget):
         
     def qt_connections(self):
         self.logbutton.clicked.connect(self.on_logbutton_clicked)
+        self.imubutton.clicked.connect(self.on_imubutton_clicked)
         self.checkbox_hene.clicked.connect(self.on_checkbox_hene_clicked)
         self.checkbox_left.clicked.connect(self.on_checkbox_left_clicked)
         self.checkbox_right.clicked.connect(self.on_checkbox_right_clicked)
@@ -254,12 +259,41 @@ class xosoft(QtGui.QWidget):
                               file=self.f)
                         
                 elif idx == HENEBOARD:
-                     self.parseData(self.heneboard, data, idx, time.time())
+                    #obtain serial data from nucleo board, this needs to go somewhere else
+                    #print("received data",len(data),"bytes")
+                    d = data
+                    while True:
+                        if len(d) < 14:
+                            break
+                        packet = d[:14]
+                        d = d[14:]
+            
+                        #unpack data into the buffer
+                        try:
+                            tmp = struct.unpack('<cccccffc',packet)
+                            print(ord(tmp[0]),ord(tmp[1]),ord(tmp[2]),ord(tmp[3]),ord(tmp[4]),tmp[5],tmp[6],ord(tmp[7]))
 
-                     if self.showHene and self.heneboard.data0.size > 0:
-                         self.plotcurve_hene0.setData(self.heneboard.ts0, self.heneboard.data0)
-                     if self.showHene and self.heneboard.data1.size > 0:
-                         self.plotcurve_hene1.setData(self.heneboard.ts1, self.heneboard.data1)
+                            if self.logstate:
+                                print('imu',
+                                      ord(tmp[0]),
+                                      ord(tmp[1]),
+                                      ord(tmp[2]),
+                                      ord(tmp[3]),
+                                      ord(tmp[4]),
+                                      tmp[5],
+                                      tmp[6],
+                                      ord(tmp[7]),
+                                      file=self.f)
+                        except:
+                            pass
+
+                    #commented out to test CAN data from CSIC Nucleo board
+                    #                    self.parseData(self.heneboard, data, idx, time.time())
+                    #                    
+                    #                    if self.showHene and self.heneboard.data0.size > 0:
+                    #                        self.plotcurve_hene0.setData(self.heneboard.ts0, self.heneboard.data0)
+                    #                    if self.showHene and self.heneboard.data1.size > 0:
+                    #                        self.plotcurve_hene1.setData(self.heneboard.ts1, self.heneboard.data1)
                          
 
             except socket.error:
@@ -312,6 +346,16 @@ class xosoft(QtGui.QWidget):
             self.showLeft = True
             self.showRight = True
     
+    def on_imubutton_clicked(self):
+        com = bytearray.fromhex("a5 01 ff 00 00")
+        com[4] = (com[1]^com[2])^com[3]
+        print("sending IMU start command:",com[0],com[1],com[2],com[3],com[4])
+        try:
+            self.sock2.sendto(com, ("192.168.0.100", 14551))
+        except socket.error:
+            print("socket",self.sock2,"could not send imu udp command")
+        
+        
     def print_data_to_file(self,str1,ts,data):        
         for i in range(0,(len(data)-1)):
             print(str1,end=" ",file=self.f)

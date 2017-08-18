@@ -5,8 +5,8 @@ import datetime
 import numpy as np
 import scipy.signal
 
-LENGTH_RAW_DATA = 10
-LENGTH_CALIBRATED_DATA = 3
+LENGTH_RAW_DATA = 9
+LENGTH_CALIBRATED_DATA = 2
 DATA_LENGTH = 16
 START_BYTE = 83
 CRC_BYTE = DATA_LENGTH-2
@@ -110,9 +110,9 @@ def parseData(sensor, data, index, timestamp):
         if data[0] != START_BYTE:
             raise Exception 
         
-        if data[1] == LENGTH_RAW_DATA and len(data) == (LENGTH_RAW_DATA + 3):
+        if data[1] == LENGTH_RAW_DATA and len(data) == (LENGTH_RAW_DATA + 4):
             sensor.processRawData( data, timestamp )
-        elif data[1] == LENGTH_CALIBRATED_DATA and len(data) == (LENGTH_CALIBRATED_DATA + 3):
+        elif data[1] == LENGTH_CALIBRATED_DATA and len(data) == (LENGTH_CALIBRATED_DATA + 4):
             sensor.processCalibratedData( data, timestamp )
         else:
             raise Exception
