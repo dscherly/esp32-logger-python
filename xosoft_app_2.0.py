@@ -22,6 +22,10 @@ LEFT = 0
 RIGHT = 1
 HENEBOARD = 2
 
+CAN_MSG = 255
+FOOT_L = 5
+FOOT_R = 6
+
 UDP_HENEBOARD = "192.168.0.101"    #local ip address
 UDP_HENEPORT = 14550    #local UDP port
 UDP_IP0 = "192.168.0.101"
@@ -29,6 +33,9 @@ UDP_PORT0 = 16501
 UDP_IP1 = "192.168.0.101"
 UDP_PORT1 = 16511
         
+START_BYTE = 165
+START_BYTE_FOOT = 83
+
 class xosoft(QtGui.QWidget):
     def __init__(self):
         super(xosoft, self).__init__()
@@ -39,7 +46,7 @@ class xosoft(QtGui.QWidget):
         
         self.timer = QtCore.QTimer()
         self.timer.timeout.connect(self.update)
-        self.timer.start(0.1)
+        self.timer.start(0.001)
         
     def init_ui(self):
         self.setWindowTitle('Xosoft')
@@ -259,41 +266,7 @@ class xosoft(QtGui.QWidget):
                               file=self.f)
                         
                 elif idx == HENEBOARD:
-                    #obtain serial data from nucleo board, this needs to go somewhere else
-                    #print("received data",len(data),"bytes")
-                    d = data
-                    while True:
-                        if len(d) < 14:
-                            break
-                        packet = d[:14]
-                        d = d[14:]
-            
-                        #unpack data into the buffer
-                        try:
-                            tmp = struct.unpack('<cccccffc',packet)
-                            print(ord(tmp[0]),ord(tmp[1]),ord(tmp[2]),ord(tmp[3]),ord(tmp[4]),tmp[5],tmp[6],ord(tmp[7]))
-
-                            if self.logstate:
-                                print('imu',
-                                      ord(tmp[0]),
-                                      ord(tmp[1]),
-                                      ord(tmp[2]),
-                                      ord(tmp[3]),
-                                      ord(tmp[4]),
-                                      tmp[5],
-                                      tmp[6],
-                                      ord(tmp[7]),
-                                      file=self.f)
-                        except:
-                            pass
-
-                    #commented out to test CAN data from CSIC Nucleo board
-                    #                    self.parseData(self.heneboard, data, idx, time.time())
-                    #                    
-                    #                    if self.showHene and self.heneboard.data0.size > 0:
-                    #                        self.plotcurve_hene0.setData(self.heneboard.ts0, self.heneboard.data0)
-                    #                    if self.showHene and self.heneboard.data1.size > 0:
-                    #                        self.plotcurve_hene1.setData(self.heneboard.ts1, self.heneboard.data1)
+                    self.parseData(self.heneboard, data)
                          
 
             except socket.error:
@@ -318,22 +291,32 @@ class xosoft(QtGui.QWidget):
             date = datetime.datetime.today()
             filename = "log_%d%02d%02d_%02d%02d%02d.csv" % (date.year, date.month, date.day, date.hour, date.minute, date.second)
             self.f = open(filename,'w')
-            print("Sensor Counter Timestamp ADC0 ADC1 ADC2 ADC3\nChannel Timestamp Value", file=self.f)
+            print("Sensor Counter ADC0 ADC1 ADC2 ADC3", file=self.f)
+            print("IMU 100 1_accel_x 1_accel_y", file=self.f)
+            print("IMU 101 1_accel_z 1_gyro_x", file=self.f)
+            print("IMU 102 1_gyro_y 1_gyro_z", file=self.f)
+            print("IMU 103 1_magnet_x 1_magnet_y", file=self.f)
+            print("IMU 104 1_magnet_z 1_temp", file=self.f)
+            print("IMU 110 2_accel_x 2_accel_y", file=self.f)
+            print("IMU 111 2_accel_z 2_gyro_x", file=self.f)
+            print("IMU 112 2_gyro_y 2_gyro_z", file=self.f)
+            print("IMU 113 2_magnet_x 2_magnet_y", file=self.f)
+            print("IMU 114 2_magnet_z 2_temp", file=self.f)
 
         else:
             print ("Logging stopped")
 
             #save heneboard log data to a file                    
-            self.print_data_to_file('Data0',self.heneboard.ts0,self.heneboard.data0)
-            self.print_data_to_file('Data1',self.heneboard.ts1,self.heneboard.data1)
-            self.print_data_to_file('Data2',self.heneboard.ts2,self.heneboard.data2)
-            self.print_data_to_file('Data3',self.heneboard.ts3,self.heneboard.data3)
-            self.print_data_to_file('Data4',self.heneboard.ts4,self.heneboard.data4)
-            self.print_data_to_file('Data5',self.heneboard.ts5,self.heneboard.data5)
-            self.print_data_to_file('Data6',self.heneboard.ts6,self.heneboard.data6)
-            self.print_data_to_file('Data7',self.heneboard.ts7,self.heneboard.data7)
-            self.print_data_to_file('Data8',self.heneboard.ts8,self.heneboard.data8)
-            self.print_data_to_file('Data9',self.heneboard.ts9,self.heneboard.data9)
+#            self.print_data_to_file('Data0',self.heneboard.ts0,self.heneboard.data0)
+#            self.print_data_to_file('Data1',self.heneboard.ts1,self.heneboard.data1)
+#            self.print_data_to_file('Data2',self.heneboard.ts2,self.heneboard.data2)
+#            self.print_data_to_file('Data3',self.heneboard.ts3,self.heneboard.data3)
+#            self.print_data_to_file('Data4',self.heneboard.ts4,self.heneboard.data4)
+#            self.print_data_to_file('Data5',self.heneboard.ts5,self.heneboard.data5)
+#            self.print_data_to_file('Data6',self.heneboard.ts6,self.heneboard.data6)
+#            self.print_data_to_file('Data7',self.heneboard.ts7,self.heneboard.data7)
+#            self.print_data_to_file('Data8',self.heneboard.ts8,self.heneboard.data8)
+#            self.print_data_to_file('Data9',self.heneboard.ts9,self.heneboard.data9)
             self.f.close()
             
             self.heneboard.max_array_length = heneClass2.MAX_ARRAY_LEN
@@ -396,23 +379,71 @@ class xosoft(QtGui.QWidget):
             self.sock2.close()
         except:
             pass
-        if self.logstate == True:   #stop logging when closed
+        if self.logstate:   #stop logging when closed
             self.on_logbutton_clicked()
-        print("Window closed -> Sockets shutdown")
+        print("Window closed -> Sockets disconnected")
         event.accept()
-
-    def parseData(self, sensor, data, index, timestamp):
+    
+    def calculateChecksum(self, data):
+        res = 0
+        for i in data:
+            res = res^i
+        return res
+             
+    def parseData(self, sensor, data):
         try:
-            #take 10 bytes at a time
-            tmp = data
-            while True:
-                if len(tmp) < 10:
-                    break
-                packet = tmp[:10]
-                tmp = tmp[10:]
-            
-                #unpack data into the buffer
-                sensor.unpack(packet, timestamp)
+            data_size = len(data)
+            while(data_size > 0):
+                if(data[0] == START_BYTE) or (data[0] == START_BYTE_FOOT):
+                    length = data[1]
+                    if data_size < length+4:    #data + start + length + msgid + checksum
+                        return
+                    msgid = data[2]
+                    packet = data[3:length+3]
+                    chksum = data[length+3];    #TODO: check for correct checksum
+#                    tmp = self.calculateChecksum(data[5:length+3])
+
+                    if msgid == CAN_MSG:    #CAN message
+                        canid = packet[0] + packet[1]*256
+                        if canid in (100,101,102,103,104,110,111,112,113,114):
+                            tmp = struct.unpack('<Hff',packet) #<Hff: little endian, unsigned short, float, float
+                            if self.logstate:
+                                print('IMU', tmp[0], tmp[1], tmp[2], file=self.f)
+                            else:
+                                print('IMU', tmp[0], tmp[1], tmp[2]) #print to screen
+                                
+                                
+                    elif msgid == FOOT_L or msgid == FOOT_R: #shoe sensor data
+                        label = 'left' if msgid == FOOT_L else 'right'
+                        if length == 2:
+                            tmp = struct.unpack('<BB',packet) #<Hff: little endian, unsigned short, float, float
+                            s0 = (tmp[1] & 1) >> 0
+                            s1 = (tmp[1] & 2) >> 1
+                            s2 = (tmp[1] & 4) >> 2
+                            s3 = (tmp[1] & 8) >> 3
+                            if self.logstate:
+                                print(label,tmp[0],s3,s2,s1,s0,file=self.f)
+                            else:
+                                print(label,tmp[0],s3,s2,s1,s0)
+                        elif length == 9:
+                            tmp = struct.unpack('<BHHHH',packet) #<Hff: little endian, unsigned short, float, float
+                            counter = tmp[0]
+                            s0 = tmp[1]
+                            s1 = tmp[2]
+                            s2 = tmp[3]
+                            s3 = tmp[4]
+                            if self.logstate:
+                                print(label,counter,s0,s1,s2,s3,file=self.f)
+                            else:
+                                print(label,counter,s0,s1,s2,s3)
+#                                print(data[0], length, msgid, packet[0],packet[1],packet[2],packet[3],packet[4])
+                            
+                    
+                    #remove read bytes from the received data
+                    data = data[length+4:]
+                else:
+                    data = data[1:]
+                data_size = len(data)
     
         except:
             return
