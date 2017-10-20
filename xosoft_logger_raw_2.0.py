@@ -42,6 +42,7 @@ START_BYTE = 165
 START_BYTE_FOOT = 83
 
 calibrate_flag = False
+calibrate_success = False
 sensors_R = [0,0,0,0]
 sensors_L = [0,0,0,0]
 thresholds_r = [500,500,500,500]
@@ -107,12 +108,14 @@ class Calibrate_dialog(QtGui.QMainWindow):
         self.label4 = QtGui.QLabel('Toe')
         self.label5 = QtGui.QLabel('Right')
         self.label6 = QtGui.QLabel('Left')
+        self.label7 = QtGui.QLabel('')
         grid.addWidget(self.label1,4,3,1,1)
         grid.addWidget(self.label2,4,4,1,1)
         grid.addWidget(self.label3,4,5,1,1)
         grid.addWidget(self.label4,4,6,1,1)
         grid.addWidget(self.label5,5,1,1,1)
         grid.addWidget(self.label6,6,1,1,1)
+        grid.addWidget(self.label7,7,0,1,6)
         
         #input fields for individual threshold values
         self.t_r0 = QtGui.QLabel()
@@ -145,7 +148,7 @@ class Calibrate_dialog(QtGui.QMainWindow):
         self.plot0 = pg.PlotWidget()
         self.plot0.setLabel('left','Heel')
         self.plot0.setBackground('w')
-        self.plot0.setYRange(0,2500)
+        self.plot0.setYRange(0,3000)
         self.plot0.hideAxis('bottom')
         self.plot0.setMinimumWidth(600)
         grid.addWidget(self.plot0,0,0,1,10)  #row, col, rowspan, colspan (extend over 5 columns)
@@ -156,7 +159,7 @@ class Calibrate_dialog(QtGui.QMainWindow):
         self.plot1 = pg.PlotWidget()
         self.plot1.setLabel('left','Outside')
         self.plot1.setBackground('w')
-        self.plot1.setYRange(0,2500)
+        self.plot1.setYRange(0,3000)
         self.plot1.hideAxis('bottom')
         self.plot1.setMinimumWidth(600)
         grid.addWidget(self.plot1,1,0,1,10)
@@ -167,7 +170,7 @@ class Calibrate_dialog(QtGui.QMainWindow):
         self.plot2 = pg.PlotWidget()
         self.plot2.setLabel('left','Inside')
         self.plot2.setBackground('w')
-        self.plot2.setYRange(0,2500)
+        self.plot2.setYRange(0,3000)
         self.plot2.hideAxis('bottom')
         self.plot2.setMinimumWidth(600)
         grid.addWidget(self.plot2,2,0,1,10)
@@ -178,7 +181,7 @@ class Calibrate_dialog(QtGui.QMainWindow):
         self.plot3 = pg.PlotWidget()
         self.plot3.setLabel('left','Toe')
         self.plot3.setBackground('w')
-        self.plot3.setYRange(0,2500)
+        self.plot3.setYRange(0,3000)
         self.plot3.hideAxis('bottom')
         self.plot3.setMinimumWidth(600)
         grid.addWidget(self.plot3,3,0,1,10)
@@ -287,12 +290,20 @@ class Calibrate_dialog(QtGui.QMainWindow):
             self.t_l1.setText(str(int(self.t1.value())))
             self.t_l2.setText(str(int(self.t2.value())))
             self.t_l3.setText(str(int(self.t3.value())))
-    
+        
+        if calibrate_flag == True:
+            #clear calibrate status
+            self.label7.clear()
+        elif calibrate_flag == False and calibrate_success == True:
+            #show calibrate success message
+            self.label7.setText('Calibration successful')
+            
     def closeEvent(self, event):
         global r_s0
         global r_s1
         global r_s2
         global r_s3
+        calibrate_flag == False
         self.timer.stop()
         r_s0 = np.empty([])
         r_s1 = np.empty([])
@@ -311,6 +322,7 @@ class xosoft(QtGui.QMainWindow):
         self.logstate = False
         self.msgid_list = []
         self.listresetCnt = 0
+        self.wait_cnt = 0
         
         self.timer = QtCore.QTimer()
         self.timer.timeout.connect(self.update)
@@ -431,9 +443,12 @@ class xosoft(QtGui.QMainWindow):
             except socket.error:
                 pass
         if calibrate_flag:
-            #TODO: send threshold values to the heneboard
-            calibrate_flag = False
-            self.send_calibrate()
+            #TODO: send threshold values to the heneboard, wait half a second for the reply
+            self.wait_cnt = self.wait_cnt+1            
+            if self.wait_cnt >= 500:
+                self.wait_cnt = 0
+                self.send_calibrate()
+            
     
     def on_calibratebutton_clicked(self):    
         self.caldialog = Calibrate_dialog(self)
@@ -535,7 +550,7 @@ class xosoft(QtGui.QMainWindow):
             self.sock2.sendto(com, ("192.168.0.100", 14551))
         except socket.error:
             print("socket",self.sock2,"could not send calibrate command right")
-        com = bytearray.fromhex("a5 08 05 00 00 00 00 00 00 00 00 00")
+        com = bytearray.fromhex("a5 08 06 00 00 00 00 00 00 00 00 00")
         com[3] = thresholds_l[0] & 255
         com[4] = thresholds_l[0] >> 8
         com[5] = thresholds_l[1] & 255
@@ -552,22 +567,55 @@ class xosoft(QtGui.QMainWindow):
         except socket.error:
             print("socket",self.sock2,"could not send calibrate command left")
             
+    #parse received data and check if multiple packets were received at once
     def parseData(self, buf, inBytes):
         global calibrate_flag
-        #TODO: check if multiple packets have been received
-        if buf[2] == FOOT_R: 
-            if buf[1] == 10:    #raw data
-                sensors_R[0] = buf[5] + (buf[6]<<8)
-                sensors_R[1] = buf[7] + (buf[8]<<8)
-                sensors_R[2] = buf[9] + (buf[10]<<8)
-                sensors_R[3] = buf[11] + (buf[12]<<8)
-        elif buf[2] == FOOT_L:
-           if buf[1] == 10: #raw data
-               sensors_L[0] = buf[5] + (buf[6]<<8)
-               sensors_L[1] = buf[7] + (buf[8]<<8)
-               sensors_L[2] = buf[9] + (buf[10]<<8)
-               sensors_L[3] = buf[11] + (buf[12]<<8)
+        global calibrate_success
         
+        buf = buf[:inBytes]
+        while len(buf) > 0:
+            if buf[0] == START_BYTE:
+                pktsize = buf[1]+4
+                if len(buf) < pktsize: break
+                if buf[2] == FOOT_R: 
+                    if buf[1] == 10:    #raw data
+                        sensors_R[0] = buf[5] + (buf[6]<<8)
+                        sensors_R[1] = buf[7] + (buf[8]<<8)
+                        sensors_R[2] = buf[9] + (buf[10]<<8)
+                        sensors_R[3] = buf[11] + (buf[12]<<8)
+                    elif buf[1] == 8:   #threshold data
+                        print('right foot packet:',end='')    
+                        for i in range(0,pktsize):                    
+                            print(buf[i], end=' ')
+                        print(' ')
+                        tmp = [0,0,0,0]
+                        tmp[0] = buf[3] + (buf[4] << 8)
+                        tmp[1] = buf[5] + (buf[6] << 8)
+                        tmp[2] = buf[7] + (buf[8] << 8)
+                        tmp[3] = buf[9] + (buf[10] << 8)
+                        for i in range(0,4):
+                            if tmp[i] != thresholds_r[i]:
+                                calibrate_success = False
+                                break
+                            else: 
+                                calibrate_success = True
+                        calibrate_flag = False
+                            
+                elif buf[2] == FOOT_L:
+                    if buf[1] == 10: #raw data
+                       sensors_L[0] = buf[5] + (buf[6]<<8)
+                       sensors_L[1] = buf[7] + (buf[8]<<8)
+                       sensors_L[2] = buf[9] + (buf[10]<<8)
+                       sensors_L[3] = buf[11] + (buf[12]<<8)     
+                    elif buf[1] == 8:   #threshold data
+                        print('left foot packet:',end='')
+                        for i in range(0,pktsize):                    
+                            print(buf[i], end=' ')
+                        print(' ')
+                buf = buf[pktsize:]
+            else:
+                buf = buf[1:]
+            
     def print_data_to_file(self,data):        
         for i in range(0,(len(data)-1)):
             self.f.write( data[i] )
