@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<CaptureStart>
+	<Name VALUE="2016092013"/>
+	<Notes VALUE=""/>
+	<Description VALUE=""/>
+	<DatabasePath VALUE="F"/>
+	<Delay VALUE="250"/>
+	<PacketID VALUE="36"/>
+</CaptureStart>

@@ -7,15 +7,18 @@ Created on Mon Jun 26 14:46:03 2017
 
 import sys
 import socket
-import time
-import datetime
-import struct
+#import time
+#import datetime
+#import struct
 from pyqtgraph.Qt import QtGui, QtCore
 import pyqtgraph as pg
 import sensorClass
 import heneClass2
 import numpy as np
-import requests
+#import requests
+import configparser
+import json
+import xml.etree.ElementTree as ET
 
 np.set_printoptions(threshold=np.nan,linewidth=np.nan)
 
@@ -37,6 +40,9 @@ UDP_IP0 = "192.168.0.101"
 UDP_PORT0 = 16501
 UDP_IP1 = "192.168.0.101"
 UDP_PORT1 = 16511
+
+VICON_IP = "192.168.10.1"
+VICON_PORT = 30
         
 START_BYTE = 165
 START_BYTE_FOOT = 83
@@ -59,6 +65,8 @@ l_s3 = np.empty([1,0])
 max_R = [0,0,0,0]
 min_R = [65535,65535,65535,65535]
 
+xmlstring = '<?xml version="1.0" encoding="UTF-8" standalone="no"?><CaptureStart><Name VALUE="2016092013"/><Notes VALUE=""/><Description VALUE=""/><DatabasePath VALUE="some pathname"/><Delay VALUE="250"/><PacketID VALUE="36"/></CaptureStart>'
+
 #functions for the sensor calibration dialog
 class Calibrate_dialog(QtGui.QMainWindow):
     def __init__(self, parent=None):
@@ -76,11 +84,10 @@ class Calibrate_dialog(QtGui.QMainWindow):
         
         #mainwindow needs a widget to hold contents
         self.widget = QtGui.QWidget()
-        self.setCentralWidget(self.widget)
-        
+        self.setCentralWidget(self.widget)  
         #add a grid to the main window widget
         grid = QtGui.QGridLayout()
-        #grid.setColumnMinimumWidth(0,600)
+        grid.setColumnMinimumWidth(0,100)
         grid.setRowMinimumHeight(0,170)
         grid.setRowMinimumHeight(1,170)
         grid.setRowMinimumHeight(2,170)
@@ -90,14 +97,11 @@ class Calibrate_dialog(QtGui.QMainWindow):
         #buttons
         self.resetbutton = QtGui.QPushButton("Reset plots")
         grid.addWidget(self.resetbutton,5,0,1,1)
-        
         self.button = QtGui.QPushButton("Set thresholds")
         grid.addWidget(self.button,6,0,1,1)     
-        
         self.radiobutton_r = QtGui.QRadioButton()
         self.radiobutton_r.setChecked(True)
         grid.addWidget(self.radiobutton_r,5,2,1,1)     
-        
         self.radiobutton_l = QtGui.QRadioButton()
         grid.addWidget(self.radiobutton_l,6,2,1,1)   
         
@@ -117,7 +121,7 @@ class Calibrate_dialog(QtGui.QMainWindow):
         grid.addWidget(self.label6,6,1,1,1)
         grid.addWidget(self.label7,7,0,1,6)
         
-        #input fields for individual threshold values
+        #labels for individual threshold values
         self.t_r0 = QtGui.QLabel()
         self.t_r1 = QtGui.QLabel()
         self.t_r2 = QtGui.QLabel()
@@ -190,10 +194,10 @@ class Calibrate_dialog(QtGui.QMainWindow):
         self.plot3.addItem(self.plotcurve3)
         
         #lines for thresholding
-        self.t0 = pg.InfiniteLine(pos=500, pen={'width':2},movable=True, angle=0, bounds=[0,2500], label='x={value:1.0f}',labelOpts={'position':0.1, 'color': (200,200,100), 'movable': True})     
-        self.t1 = pg.InfiniteLine(pos=500, pen={'width':2},movable=True, angle=0, bounds=[0,2500], label='x={value:1.0f}',labelOpts={'position':0.1, 'color': (200,200,100), 'movable': True})  
-        self.t2 = pg.InfiniteLine(pos=500, pen={'width':2},movable=True, angle=0, bounds=[0,2500], label='x={value:1.0f}',labelOpts={'position':0.1, 'color': (200,200,100), 'movable': True})
-        self.t3 = pg.InfiniteLine(pos=500, pen={'width':2},movable=True, angle=0, bounds=[0,2500], label='x={value:1.0f}',labelOpts={'position':0.1, 'color': (200,200,100), 'movable': True})
+        self.t0 = pg.InfiniteLine(pos=thresholds_r[0], pen={'width':2},movable=True, angle=0, bounds=[0,2500], label='x={value:1.0f}',labelOpts={'position':0.1, 'color': (200,200,100), 'movable': True})     
+        self.t1 = pg.InfiniteLine(pos=thresholds_r[1], pen={'width':2},movable=True, angle=0, bounds=[0,2500], label='x={value:1.0f}',labelOpts={'position':0.1, 'color': (200,200,100), 'movable': True})  
+        self.t2 = pg.InfiniteLine(pos=thresholds_r[2], pen={'width':2},movable=True, angle=0, bounds=[0,2500], label='x={value:1.0f}',labelOpts={'position':0.1, 'color': (200,200,100), 'movable': True})
+        self.t3 = pg.InfiniteLine(pos=thresholds_r[3], pen={'width':2},movable=True, angle=0, bounds=[0,2500], label='x={value:1.0f}',labelOpts={'position':0.1, 'color': (200,200,100), 'movable': True})
         self.plot0.addItem(self.t0)
         self.plot1.addItem(self.t1)
         self.plot2.addItem(self.t2)
@@ -240,7 +244,14 @@ class Calibrate_dialog(QtGui.QMainWindow):
         
     def on_button_clicked(self):      
         global calibrate_flag 
-        calibrate_flag = True
+        global calibrate_success
+        if calibrate_flag:
+            calibrate_flag = False
+            self.button.setText("Set thresholds")
+        else:
+            calibrate_flag = True
+            calibrate_success = False
+            self.button.setText("Stop")
         
     def update(self):
         if self.radiobutton_r.isChecked():
@@ -297,13 +308,15 @@ class Calibrate_dialog(QtGui.QMainWindow):
         elif calibrate_flag == False and calibrate_success == True:
             #show calibrate success message
             self.label7.setText('Calibration successful')
+            self.button.setText("Set thresholds")
             
     def closeEvent(self, event):
         global r_s0
         global r_s1
         global r_s2
         global r_s3
-        calibrate_flag == False
+        global calibrate_flag
+        calibrate_flag = False
         self.timer.stop()
         r_s0 = np.empty([])
         r_s1 = np.empty([])
@@ -323,6 +336,17 @@ class xosoft(QtGui.QMainWindow):
         self.msgid_list = []
         self.listresetCnt = 0
         self.wait_cnt = 0
+        
+        #read threshold settings from ini file
+        config = configparser.ConfigParser()
+        config.read("settings.ini")
+        global thresholds_l
+        global thresholds_r
+        try:
+            thresholds_l = json.loads(config.get("Thresholds","Left"))
+            thresholds_r = json.loads(config.get("Thresholds","Right"))
+        except:
+            pass
         
         self.timer = QtCore.QTimer()
         self.timer.timeout.connect(self.update)
@@ -418,6 +442,15 @@ class xosoft(QtGui.QMainWindow):
             sys.exit()
         self.socketlist = [self.sock2]
         
+        #bind the vicon port socket
+        self.viconsock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            self.viconsock.bind((VICON_IP, VICON_PORT))
+            self.viconsock.setblocking(0)
+            self.viconsock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        except socket.error:
+            print("Vicon socket bind failed")
+        
     def update(self):
         global calibrate_flag
         #try to read from each socket
@@ -439,15 +472,37 @@ class xosoft(QtGui.QMainWindow):
                             for i in range(len(self.msgid_list)):
                                 del self.msgid_list[0]
                     else:
-                        self.f.write( buf[:inBytes] )#self.print_data_to_file(buf)                          
+                        self.f.write( buf[:inBytes] )                       
             except socket.error:
                 pass
+        #get start/stop signal from vicon
+        try:
+            xmlstring, addr = self.viconsock.recvfrom(1024)
+            if len(xmlstring) > 0:
+                try:
+                    root = ET.fromstring(xmlstring)
+                    if root.tag == 'CaptureStart':  #TODO: connect to start logging function
+                        for child in root:
+                            if child.tag == 'Name':
+                                print(child.tag,':',child.attrib)
+                                filename = child.attrib.get('VALUE')
+                                print("received filename:",filename)
+                    elif root.tag == 'CaptureStop':
+                        print("Vicon stop signal received") #TODO connect to stop loggin function
+                except:
+                    print("Received invalid xml string")
+        except:
+            pass
+        
         if calibrate_flag:
-            #TODO: send threshold values to the heneboard, wait half a second for the reply
-            self.wait_cnt = self.wait_cnt+1            
-            if self.wait_cnt >= 500:
-                self.wait_cnt = 0
+            #send threshold values to the heneboard, wait some time for the reply
+            if self.wait_cnt == 0:
                 self.send_calibrate()
+                self.wait_cnt = self.wait_cnt+1     
+            elif self.wait_cnt >= 5000:
+                self.wait_cnt = 0    
+            else:
+                self.wait_cnt = self.wait_cnt+1 
             
     
     def on_calibratebutton_clicked(self):    
@@ -544,8 +599,8 @@ class xosoft(QtGui.QMainWindow):
         com[9] = thresholds_r[3] & 255
         com[10] = thresholds_r[3] >> 8
         com[11] = ((((((((com[1]^com[2])^com[3])^com[4])^com[5])^com[6])^com[7])^com[8])^com[9])^com[10]
-        print("com:",com[3],com[4],com[5],com[6],com[7],com[8],com[9],com[10])
-        print("sending calibrate command right:",thresholds_r)
+#        print("com:",com[3],com[4],com[5],com[6],com[7],com[8],com[9],com[10])
+        print("calibrate right:",thresholds_r)
         try:
             self.sock2.sendto(com, ("192.168.0.100", 14551))
         except socket.error:
@@ -560,17 +615,32 @@ class xosoft(QtGui.QMainWindow):
         com[9] = thresholds_l[3] & 255
         com[10] = thresholds_l[3] >> 8
         com[11] = ((((((((com[1]^com[2])^com[3])^com[4])^com[5])^com[6])^com[7])^com[8])^com[9])^com[10]
-        print("com:",com[3],com[4],com[5],com[6],com[7],com[8],com[9],com[10])
-        print("sending calibrate command left:",thresholds_l)
+#        print("com:",com[3],com[4],com[5],com[6],com[7],com[8],com[9],com[10])
+        print("calibrate left:",thresholds_l)
         try:
             self.sock2.sendto(com, ("192.168.0.100", 14551))
         except socket.error:
             print("socket",self.sock2,"could not send calibrate command left")
-            
+        
+        #write thresholds to settings.ini
+        config = configparser.ConfigParser()
+        cfgfile = open("settings.ini",'w')
+        try:
+            config.set("Thresholds","Left",json.dumps(thresholds_l))
+            config.set("Thresholds","Right",json.dumps(thresholds_r))
+        except:
+            config.add_section('Thresholds')
+            config.set("Thresholds","Left",json.dumps(thresholds_l))
+            config.set("Thresholds","Right",json.dumps(thresholds_r))
+        config.write(cfgfile)
+        cfgfile.close()
+        
     #parse received data and check if multiple packets were received at once
     def parseData(self, buf, inBytes):
         global calibrate_flag
         global calibrate_success
+        cal_r = False
+        cal_l = False
         
         buf = buf[:inBytes]
         while len(buf) > 0:
@@ -595,12 +665,10 @@ class xosoft(QtGui.QMainWindow):
                         tmp[3] = buf[9] + (buf[10] << 8)
                         for i in range(0,4):
                             if tmp[i] != thresholds_r[i]:
-                                calibrate_success = False
+                                cal_r = False
                                 break
                             else: 
-                                calibrate_success = True
-                        calibrate_flag = False
-                            
+                                cal_r = True                            
                 elif buf[2] == FOOT_L:
                     if buf[1] == 10: #raw data
                        sensors_L[0] = buf[5] + (buf[6]<<8)
@@ -612,6 +680,23 @@ class xosoft(QtGui.QMainWindow):
                         for i in range(0,pktsize):                    
                             print(buf[i], end=' ')
                         print(' ')
+                        tmp = [0,0,0,0]
+                        tmp[0] = buf[3] + (buf[4] << 8)
+                        tmp[1] = buf[5] + (buf[6] << 8)
+                        tmp[2] = buf[7] + (buf[8] << 8)
+                        tmp[3] = buf[9] + (buf[10] << 8)
+                        for i in range(0,4):
+                            if tmp[i] != thresholds_l[i]:
+                                cal_l = False
+                                break
+                            else: 
+                                cal_l = True
+                #stop sending calibrate signal when correct reply received
+                if cal_r and cal_l and calibrate_flag:
+                    cal_r = False
+                    cal_l = False
+                    calibrate_flag = False
+                    calibrate_success = True
                 buf = buf[pktsize:]
             else:
                 buf = buf[1:]
@@ -650,7 +735,7 @@ if __name__ == '__main__':
 #            print(f.status_code)
 #            if f.status_code == 200:
 #                print("status ok, sending new calibration data")
-#                #TODO: send data here
+#                #send data here
 #
 #        except requests.Timeout:            
 #            self.messageLabel.setText("Timeout")
